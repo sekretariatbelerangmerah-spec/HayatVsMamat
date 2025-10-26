@@ -2,68 +2,55 @@ name: Android Debug APK
 on:
   workflow_dispatch:
 
-env:
-  PROJECT_DIR: HayatVsMamat
-
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .   # tukar ke subfolder kalau projek bukan di root
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      # --- Install Node via NVM (bukan actions/setup-node) ---
-      - name: Install Node 18 with NVM
-        shell: bash
+      - name: Setup Java (Gradle needs JDK 17)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Node 18 via NVM
         run: |
-          export PROFILE=/home/runner/.bashrc
+          export NVM_DIR="$HOME/.nvm"
           curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-          source "$HOME/.nvm/nvm.sh"
+          source "$NVM_DIR/nvm.sh"
           nvm install 18
           node -v
           npm -v
 
-      # Java untuk Gradle
-      - name: Setup Java (Gradle)
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-
       - name: Install dependencies
-        shell: bash
-        run: |
-          source "$HOME/.nvm/nvm.sh"
-          cd "$PROJECT_DIR"
-          npm ci || npm install
+        run: npm ci || npm install
 
-      - name: Expo prebuild (skip jika android/ wujud)
-        shell: bash
+      - name: Expo prebuild (only if missing android/)
         run: |
-          source "$HOME/.nvm/nvm.sh"
-          cd "$PROJECT_DIR"
           if [ ! -d "android" ]; then
-            npx --yes expo prebuild --platform android --clean
+            npx expo prebuild --platform android --clean
           else
-            echo "✅ android/ exists — skip prebuild"
+            echo "android/ exists, skip prebuild"
           fi
 
-      - name: Set Android SDK path
-        shell: bash
+      - name: Set Android SDK path for Gradle
         run: |
-          echo "sdk.dir=/usr/lib/android-sdk" > "$PROJECT_DIR/android/local.properties"
-          cat "$PROJECT_DIR/android/local.properties"
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
+          cat android/local.properties
 
       - name: Build Debug APK
-        shell: bash
         run: |
-          cd "$PROJECT_DIR/android"
-          ./gradlew assembleDebug
+          cd android
+          ./gradlew clean :app:assembleDebug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: apk-debug
-          path: ${{ env.PROJECT_DIR }}/android/app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
-# trigger rebuild
+          name: app-debug
+          path: android/app/build/outputs/apk/debug/*.apk
