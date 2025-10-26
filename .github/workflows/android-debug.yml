@@ -1,53 +1,52 @@
 name: Android Debug APK
-on: [workflow_dispatch]
+on:
+  workflow_dispatch:
 
 env:
-  PROJECT_DIR: HayatVsMamat        # <- nama folder projek kau
+  PROJECT_DIR: HayatVsMamat
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Java (Gradle needs JDK)
+      # Node tanpa cache
+      - name: Setup Node.js (no cache)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Setup Java (Gradle)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18
-          cache: 'npm'
-          cache-dependency-path: ${{ env.PROJECT_DIR }}/package-lock.json
-
       - name: Install dependencies
-        working-directory: ${{ env.PROJECT_DIR }}
-        run: npm ci || npm install
-
-      # Prebuild hanya jika folder android belum ada
-      - name: Expo prebuild (only if missing android/)
-        shell: bash
         run: |
-          if [ ! -d "${PROJECT_DIR}/android" ]; then
-            npx --yes expo prebuild --platform android --clean --working-dir "${PROJECT_DIR}"
+          cd "$PROJECT_DIR"
+          npm install
+
+      - name: Expo prebuild (skip if android/ exists)
+        run: |
+          cd "$PROJECT_DIR"
+          if [ ! -d "android" ]; then
+            npx --yes expo prebuild --platform android --clean
           else
-            echo "android/ already exists — skip prebuild"
+            echo "✅ android/ exists — skip prebuild"
           fi
 
       - name: Set Android SDK path
         run: |
-          echo "sdk.dir=/usr/lib/android-sdk" > "${PROJECT_DIR}/android/local.properties"
-          cat "${PROJECT_DIR}/android/local.properties"
+          echo "sdk.dir=/usr/lib/android-sdk" > "$PROJECT_DIR/android/local.properties"
 
       - name: Build Debug APK
-        working-directory: ${{ env.PROJECT_DIR }}/android
-        run: ./gradlew clean :app:assembleDebug
+        run: |
+          cd "$PROJECT_DIR/android"
+          ./gradlew assembleDebug
 
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: apk-debug
