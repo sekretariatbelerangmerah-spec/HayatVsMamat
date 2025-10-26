@@ -8,28 +8,39 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
-      # Guna v3 – elak isu cache pada v4
-      - name: Setup Node.js (v3, no cache)
-        uses: actions/setup-node@v3
-        with:
-          node-version: 18
+      # --- Install Node via NVM (bukan actions/setup-node) ---
+      - name: Install Node 18 with NVM
+        shell: bash
+        run: |
+          export PROFILE=/home/runner/.bashrc
+          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+          source "$HOME/.nvm/nvm.sh"
+          nvm install 18
+          node -v
+          npm -v
 
+      # Java untuk Gradle
       - name: Setup Java (Gradle)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - name: Install deps (npm, fallback yarn)
+      - name: Install dependencies
+        shell: bash
         run: |
+          source "$HOME/.nvm/nvm.sh"
           cd "$PROJECT_DIR"
-          npm install || (corepack enable && yarn install)
+          npm ci || npm install
 
-      - name: Expo prebuild (skip if android/ exists)
+      - name: Expo prebuild (skip jika android/ wujud)
+        shell: bash
         run: |
+          source "$HOME/.nvm/nvm.sh"
           cd "$PROJECT_DIR"
           if [ ! -d "android" ]; then
             npx --yes expo prebuild --platform android --clean
@@ -38,15 +49,18 @@ jobs:
           fi
 
       - name: Set Android SDK path
+        shell: bash
         run: |
           echo "sdk.dir=/usr/lib/android-sdk" > "$PROJECT_DIR/android/local.properties"
+          cat "$PROJECT_DIR/android/local.properties"
 
       - name: Build Debug APK
+        shell: bash
         run: |
           cd "$PROJECT_DIR/android"
           ./gradlew assembleDebug
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: apk-debug
