@@ -1,9 +1,12 @@
 name: Android Debug APK
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
+
+# Ubah PROJECT_DIR kalau app kau berada dalam subfolder
+env:
+  PROJECT_DIR: .
+  ANDROID_SDK_ROOT: /usr/lib/android-sdk
 
 jobs:
   build:
@@ -13,34 +16,61 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node 18
+      - name: Use Node 18 + enable Corepack (pnpm cache)
         uses: actions/setup-node@v4
         with:
           node-version: 18
+          cache: pnpm
+          cache-dependency-path: ${{ env.PROJECT_DIR }}/pnpm-lock.yaml
+      - run: corepack enable
 
-      - name: Install pnpm
-        run: npm install -g pnpm
+      - name: Sanity check repo
+        run: |
+          echo "PWD:"; pwd
+          ls -la
+          test -f "$PROJECT_DIR/package.json" || (echo "❌ package.json tak jumpa di $PROJECT_DIR"; exit 1)
 
-      - name: Enable Corepack (optional)
-        run: corepack enable
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Setup Java (Gradle)
+      - name: Setup Java (Gradle needs JDK)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - name: Expo prebuild
-        run: npx expo prebuild || true
+      - name: Cache Gradle
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Install deps with pnpm (frozen lockfile)
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Expo prebuild (skip kalau android/ sudah ada)
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          if [ ! -d android ]; then
+            npx expo prebuild --platform android --clean
+          else
+            echo "android/ exists — skip prebuild"
+          fi
+
+      - name: Set Android SDK path (local.properties)
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" > android/local.properties
+          cat android/local.properties
 
       - name: Build Debug APK
-        run: npx expo run:android --variant debug
+        working-directory: ${{ env.PROJECT_DIR }}/android
+        run: ./gradlew --no-daemon assembleDebug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: apk-debug
+          path: ${{ env.PROJECT_DIR }}/android/app/build/outputs/apk/debug/*.apk
