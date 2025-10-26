@@ -11,9 +11,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Node tanpa cache
-      - name: Setup Node.js (no cache)
-        uses: actions/setup-node@v4
+      # Guna v3 – elak isu cache pada v4
+      - name: Setup Node.js (v3, no cache)
+        uses: actions/setup-node@v3
         with:
           node-version: 18
 
@@ -23,10 +23,10 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Install dependencies
+      - name: Install deps (npm, fallback yarn)
         run: |
           cd "$PROJECT_DIR"
-          npm install
+          npm install || (corepack enable && yarn install)
 
       - name: Expo prebuild (skip if android/ exists)
         run: |
