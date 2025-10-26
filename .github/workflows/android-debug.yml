@@ -5,14 +5,52 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node 18
+      - name: Setup Node 18 + pnpm cache
         uses: actions/setup-node@v4
         with:
           node-version: 18
+          cache: 'pnpm'
+          cache-dependency-path: '**/pnpm-lock.yaml'
+
+      # Cari folder yang mengandungi package.json (dan kalau ada, app.json/app.config.*)
+      - name: Locate app directory (auto)
+        id: locate
+        shell: bash
+        run: |
+          set -e
+          # Cari calon folder mengandungi package.json (abaikan node_modules)
+          CANDIDATES=$(find . -type f -name package.json -not -path "*/node_modules/*" -printf '%h\n' | sort -u)
+          APP_DIR=""
+
+          # Pilih folder yang juga ada app.json/app.config atau expo dalam deps
+          for d in $CANDIDATES; do
+            if [ -f "$d/app.json" ] || ls "$d"/app.config.* >/dev/null 2>&1; then
+              APP_DIR="$d"
+              break
+            fi
+            if jq -er '.dependencies.expo // .devDependencies.expo' "$d/package.json" >/dev/null 2>&1; then
+              APP_DIR="$d"
+              break
+            fi
+          done
+
+          # fallback: ambil folder pertama je
+          if [ -z "$APP_DIR" ]; then
+            APP_DIR=$(echo "$CANDIDATES" | head -n1)
+          fi
+
+          if [ -z "$APP_DIR" ]; then
+            echo "❌ Tak jumpa package.json. Pastikan repo ada projek Expo/React Native."
+            exit 1
+          fi
+
+          echo "APP_DIR=$APP_DIR" >> "$GITHUB_ENV"
+          echo "📁 APP_DIR=$APP_DIR"
 
       - name: Enable Corepack (pnpm)
         run: |
@@ -21,6 +59,7 @@ jobs:
           pnpm -v
 
       - name: Install dependencies (pnpm)
+        working-directory: ${{ env.APP_DIR }}
         run: pnpm install --frozen-lockfile
 
       - name: Setup Java (Gradle)
@@ -30,6 +69,7 @@ jobs:
           java-version: 17
 
       - name: Expo prebuild (skip jika android/ wujud)
+        working-directory: ${{ env.APP_DIR }}
         run: |
           if [ ! -d "android" ]; then
             pnpx expo prebuild --platform android --clean
@@ -38,9 +78,11 @@ jobs:
           fi
 
       - name: Set Android SDK path
+        working-directory: ${{ env.APP_DIR }}
         run: echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
 
       - name: Build Debug APK
+        working-directory: ${{ env.APP_DIR }}
         run: |
           cd android
           ./gradlew assembleDebug
@@ -49,5 +91,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: apk-debug
-          path: android/app/build/outputs/apk/debug/*.apk
+          path: ${{ env.APP_DIR }}/android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
