@@ -1,33 +1,55 @@
 name: Android Debug APK
+on: [workflow_dispatch]
 
-on:
-  workflow_dispatch:
+env:
+  PROJECT_DIR: HayatVsMamat        # <- nama folder projek kau
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+
+      - name: Setup Java (Gradle needs JDK)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 18
+          cache: 'npm'
+          cache-dependency-path: ${{ env.PROJECT_DIR }}/package-lock.json
 
       - name: Install dependencies
+        working-directory: ${{ env.PROJECT_DIR }}
         run: npm ci || npm install
 
-      - name: Prebuild Expo project
-        run: npx expo prebuild --platform android --clean
+      # Prebuild hanya jika folder android belum ada
+      - name: Expo prebuild (only if missing android/)
+        shell: bash
+        run: |
+          if [ ! -d "${PROJECT_DIR}/android" ]; then
+            npx --yes expo prebuild --platform android --clean --working-dir "${PROJECT_DIR}"
+          else
+            echo "android/ already exists — skip prebuild"
+          fi
 
-      - name: Set SDK path
-        run: echo "sdk.dir=/usr/lib/android-sdk" > android/local.properties
+      - name: Set Android SDK path
+        run: |
+          echo "sdk.dir=/usr/lib/android-sdk" > "${PROJECT_DIR}/android/local.properties"
+          cat "${PROJECT_DIR}/android/local.properties"
 
       - name: Build Debug APK
-        run: |
-          cd android
-          ./gradlew assembleDebug
+        working-directory: ${{ env.PROJECT_DIR }}/android
+        run: ./gradlew clean :app:assembleDebug
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: apk-debug
-          path: android/app/build/outputs/apk/debug/*.apk
+          path: ${{ env.PROJECT_DIR }}/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
