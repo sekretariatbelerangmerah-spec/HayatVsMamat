@@ -66,3 +66,4 @@ jobs:
           name: apk-debug
           path: ${{ env.PROJECT_DIR }}/android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+# trigger rebuild
