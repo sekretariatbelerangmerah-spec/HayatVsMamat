@@ -12,14 +12,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node 18 + pnpm cache
+      - name: Setup Node 18 + Corepack (pnpm cache)
         uses: actions/setup-node@v4
         with:
           node-version: 18
           cache: pnpm
           cache-dependency-path: ${{ env.PROJECT_DIR }}/pnpm-lock.yaml
 
-      - name: Install deps (pnpm)
+      - name: Install deps with pnpm
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
           corepack enable
@@ -31,7 +31,7 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Expo prebuild (skip jika android/ wujud)
+      - name: Expo prebuild (skip if android/ exists)
         run: |
           if [ ! -d "${{ env.PROJECT_DIR }}/android" ]; then
             cd "${{ env.PROJECT_DIR }}"
