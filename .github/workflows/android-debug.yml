@@ -5,52 +5,47 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: .   # tukar ke subfolder kalau projek bukan di root
-
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Java (Gradle needs JDK 17)
+      - name: Setup Node 18 + Corepack
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'pnpm'
+
+      - name: Enable Corepack & install dependencies
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      - name: Setup Java for Gradle
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: 17
 
-      - name: Install Node 18 via NVM
-        run: |
-          export NVM_DIR="$HOME/.nvm"
-          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-          source "$NVM_DIR/nvm.sh"
-          nvm install 18
-          node -v
-          npm -v
-
-      - name: Install dependencies
-        run: npm ci || npm install
-
-      - name: Expo prebuild (only if missing android/)
+      - name: Expo prebuild (skip if android/ exists)
         run: |
           if [ ! -d "android" ]; then
-            npx expo prebuild --platform android --clean
+            pnpx expo prebuild --platform android --clean
           else
-            echo "android/ exists, skip prebuild"
+            echo "✅ android/ exists — skip prebuild"
           fi
 
-      - name: Set Android SDK path for Gradle
+      - name: Set Android SDK path
         run: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
-          cat android/local.properties
 
       - name: Build Debug APK
         run: |
           cd android
-          ./gradlew clean :app:assembleDebug
+          ./gradlew assembleDebug
 
-      - name: Upload APK artifact
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
+          name: apk-debug
           path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
