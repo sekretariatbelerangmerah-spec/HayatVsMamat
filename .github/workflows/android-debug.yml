@@ -2,9 +2,6 @@ name: Android Debug APK
 on:
   workflow_dispatch:
 
-env:
-  PROJECT_DIR: HayatVsMamat  # <-- tukar jika perlu
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -12,7 +9,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Node 18 + aktifkan Corepack supaya pnpm wujud
       - name: Setup Node 18
         uses: actions/setup-node@v4
         with:
@@ -24,42 +20,34 @@ jobs:
           corepack prepare pnpm@latest --activate
           pnpm -v
 
-      # Install dep dalam folder app (mesti ada pnpm-lock.yaml di sini)
       - name: Install dependencies (pnpm)
-        working-directory: ${{ env.PROJECT_DIR }}
         run: pnpm install --frozen-lockfile
 
-      # Java untuk Gradle
       - name: Setup Java (Gradle)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      # Prebuild Expo kalau folder android/ belum ada
       - name: Expo prebuild (skip jika android/ wujud)
         run: |
-          if [ ! -d "${{ env.PROJECT_DIR }}/android" ]; then
-            cd "${{ env.PROJECT_DIR }}"
+          if [ ! -d "android" ]; then
             pnpx expo prebuild --platform android --clean
           else
             echo "✅ android/ exists — skip prebuild"
           fi
 
-      # Tulis SDK path untuk Gradle
       - name: Set Android SDK path
-        run: echo "sdk.dir=$ANDROID_SDK_ROOT" > "${{ env.PROJECT_DIR }}/android/local.properties"
+        run: echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
 
-      # Build APK debug
       - name: Build Debug APK
         run: |
-          cd "${{ env.PROJECT_DIR }}/android"
+          cd android
           ./gradlew assembleDebug
 
-      # Upload APK sebagai artifact
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: apk-debug
-          path: ${{ env.PROJECT_DIR }}/android/app/build/outputs/apk/debug/*.apk
+          path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
