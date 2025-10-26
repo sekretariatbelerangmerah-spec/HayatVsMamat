@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECT_DIR: HayatVsMamat
+  PROJECT_DIR: HayatVsMamat  # <-- tukar jika perlu
 
 jobs:
   build:
@@ -12,26 +12,32 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node 18 + Corepack (pnpm cache)
+      # Node 18 + aktifkan Corepack supaya pnpm wujud
+      - name: Setup Node 18
         uses: actions/setup-node@v4
         with:
           node-version: 18
-          cache: pnpm
-          cache-dependency-path: ${{ env.PROJECT_DIR }}/pnpm-lock.yaml
 
-      - name: Install deps with pnpm
-        working-directory: ${{ env.PROJECT_DIR }}
+      - name: Enable Corepack (pnpm)
         run: |
           corepack enable
-          pnpm install --frozen-lockfile
+          corepack prepare pnpm@latest --activate
+          pnpm -v
 
+      # Install dep dalam folder app (mesti ada pnpm-lock.yaml di sini)
+      - name: Install dependencies (pnpm)
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: pnpm install --frozen-lockfile
+
+      # Java untuk Gradle
       - name: Setup Java (Gradle)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - name: Expo prebuild (skip if android/ exists)
+      # Prebuild Expo kalau folder android/ belum ada
+      - name: Expo prebuild (skip jika android/ wujud)
         run: |
           if [ ! -d "${{ env.PROJECT_DIR }}/android" ]; then
             cd "${{ env.PROJECT_DIR }}"
@@ -40,15 +46,17 @@ jobs:
             echo "✅ android/ exists — skip prebuild"
           fi
 
+      # Tulis SDK path untuk Gradle
       - name: Set Android SDK path
-        run: |
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > "${{ env.PROJECT_DIR }}/android/local.properties"
+        run: echo "sdk.dir=$ANDROID_SDK_ROOT" > "${{ env.PROJECT_DIR }}/android/local.properties"
 
+      # Build APK debug
       - name: Build Debug APK
         run: |
           cd "${{ env.PROJECT_DIR }}/android"
           ./gradlew assembleDebug
 
+      # Upload APK sebagai artifact
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
